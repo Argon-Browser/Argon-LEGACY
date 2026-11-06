@@ -36,7 +36,7 @@ class ApplyTests(unittest.TestCase):
 
     def test_overlay_files_and_branding_are_copied_into_the_tree(self):
         self.apply()
-        for name in ("tokens.css", "argon.css", "argon-controller.mjs"):
+        for name in ("tokens.css", "argon.css", "argon-controller.mjs", "appearance.mjs"):
             target = self.source / "browser/base/content/argon" / name
             self.assertTrue(target.is_file(), f"missing {name}")
         self.assertTrue((self.source / "browser/branding/argon/moz.build").is_file())
@@ -46,7 +46,7 @@ class ApplyTests(unittest.TestCase):
         self.apply()
         text = (self.source / "browser/base/jar.mn").read_text()
         block = text.split("# BEGIN Argon overlay")[1].split("# END Argon overlay")[0]
-        for name in ("tokens.css", "argon.css", "argon-controller.mjs"):
+        for name in ("tokens.css", "argon.css", "argon-controller.mjs", "appearance.mjs"):
             self.assertIn(f"content/browser/argon/{name}", block)
         self.assertLess(text.index("# BEGIN Argon overlay"), text.index("# L10n resources and overrides."))
 

@@ -112,8 +112,8 @@ and git artifact builds need a **git-cinnabar** clone. The GitHub tarball that
 
 | Target | Change |
 | :-- | :-- |
-| `browser/base/content/argon/` | `tokens.css`, `argon.css`, `argon-controller.mjs` added |
-| `browser/base/jar.mn` | three `content/browser/argon/*` entries |
+| `browser/base/content/argon/` | `tokens.css`, `argon.css`, `argon-controller.mjs`, `appearance.mjs` added |
+| `browser/base/jar.mn` | four `content/browser/argon/*` entries, including the controller's imported state module |
 | `browser/base/content/browser.xhtml` | `#include argon-window-hooks.inc.xhtml` after `browser-main.js` |
 | `browser/app/profile/firefox.js` | `argon.*` defaults; Mozilla studies, Normandy, and data submission off by default |
 | `browser/moz.configure` | `MOZ_APP_VENDOR` (`Argon`) and `MOZ_APP_PROFILE` (`argon`) implied |
@@ -192,3 +192,15 @@ platform APIs requires a full build.
 ```bash
 python3 -m unittest discover -s tests/build -v
 ```
+
+The overlay contract checks transitive relative module imports, not just the
+resources linked directly from `browser.xhtml`. On the installed Firefox test
+host, the chrome smoke suite stages exactly those manifest files and loads the
+window's real stylesheet and module hooks. With `ARGON_TEST_BINARY` set, it
+injects nothing: the built browser must initialize its own appearance controls.
+The rendered tab label/background and New Tab color scheme are checked in
+addition to toolbar geometry. Theme selection also sets Gecko's native web
+appearance preference; System restores automatic OS matching.
+
+Set `ARGON_TEST_ARTIFACTS` to keep screenshots and logs from different test
+binaries in separate directories.

@@ -12,6 +12,7 @@ import re
 import struct
 import unittest
 from pathlib import Path
+from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parents[2]
 BRANDING = ROOT / "browser" / "branding" / "argon"
@@ -110,6 +111,22 @@ class BrandingAssetTests(unittest.TestCase):
         logo = (CONTENT / "about-logo.svg").read_text(encoding="utf-8")
         self.assertIn("#1E1E1E", logo, "primary mark must use the Obsidian container colour")
         self.assertIn("#FBF8F4", logo, "primary mark must use the Ivory glyph colour")
+
+    def test_new_tab_wordmark_is_text_only_and_inherits_the_page_color(self):
+        """New Tab supplies a separate 64 px logo and the contrasting fill."""
+        svg = ElementTree.fromstring((CONTENT / "firefox-wordmark.svg").read_text())
+        namespace = {"svg": "http://www.w3.org/2000/svg"}
+        self.assertFalse(svg.findall(".//svg:rect", namespace),
+                         "The wordmark must not duplicate the standalone logo")
+        text = svg.find("svg:text", namespace)
+        self.assertIsNotNone(text)
+        assert text is not None
+        self.assertEqual(text.text, "Argon")
+        self.assertEqual(text.get("fill"), "context-fill",
+                         "Hardcoded Ivory disappears against a light New Tab background")
+        _, _, width, height = map(float, svg.attrib["viewBox"].split())
+        self.assertLessEqual(width / height, 4,
+                             "The wordmark must fill its native 105 px background, not shrink a lockup")
 
     def test_brand_kit_assets_and_tokens_exist(self):
         for name in (

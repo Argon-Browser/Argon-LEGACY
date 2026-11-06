@@ -53,6 +53,24 @@ class OverlayContractTests(unittest.TestCase):
             self.assertTrue(entry["source"].startswith("content/argon/"),
                             "jar.mn entries must point inside the packaged argon directory")
 
+    def test_relative_module_dependencies_are_copied_and_packaged(self):
+        """A window hook is unusable if one of its transitive imports is absent."""
+        copied = {Path(entry["to"]).name: ROOT / entry["from"] for entry in OVERLAY["files"]}
+        jar_hook = next(hook for hook in OVERLAY["hooks"] if hook["path"] == "browser/base/jar.mn")
+        packaged = {Path(entry["source"]).name for entry in jar_hook["entries"]}
+        pending = [name for name in self.referenced if name.endswith(".mjs")]
+        visited = set()
+        while pending:
+            name = pending.pop()
+            if name in visited:
+                continue
+            visited.add(name)
+            self.assertIn(name, copied, f"{name} is imported but never copied by the overlay")
+            self.assertIn(name, packaged, f"{name} is imported but never packaged in jar.mn")
+            imports = re.findall(r'(?:from\s*|import\s*\()\s*[\'"]\./([^\'"]+)',
+                                 copied[name].read_text(encoding="utf-8"))
+            pending.extend(imports)
+
     def test_the_preference_defaults_cover_every_preference_the_controller_reads(self):
         prefs_text = PREFS.read_text(encoding="utf-8")
         declared = set(re.findall(r'pref\("([\w.]+)"', prefs_text))

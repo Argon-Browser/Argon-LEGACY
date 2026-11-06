@@ -6,8 +6,10 @@ Until one exists, the installed Firefox serves as the Gecko test host and the
 development modules are loaded into it from a test-only resource directory.
 """
 import gc
+import json
 import os
 from pathlib import Path
+import re
 import shutil
 import socket
 import tempfile
@@ -15,9 +17,10 @@ import unittest
 from unittest.mock import patch
 
 from marionette_driver.marionette import Marionette
+from marionette_driver.wait import Wait
 
 ROOT = Path(__file__).resolve().parents[2]
-ARTIFACTS = ROOT / "artifacts" / "chrome-smoke"
+ARTIFACTS = Path(os.environ.get("ARGON_TEST_ARTIFACTS", ROOT / "artifacts/chrome-smoke"))
 
 
 class ChromeSmoke(unittest.TestCase):
@@ -27,14 +30,13 @@ class ChromeSmoke(unittest.TestCase):
         workspace = ROOT / ".cache" / "browser-tests"
         workspace.mkdir(parents=True, exist_ok=True)
         cls.resources = Path(tempfile.mkdtemp(prefix="argon-resources-", dir=workspace))
-        for source in [
-            ROOT / "argon/preferences/appearance.mjs",
-            ROOT / "browser/base/content/argon-controller.mjs",
-            ROOT / "argon/design-system/tokens.css",
-            ROOT / "browser/themes/shared/argon.css",
-        ]:
-            if source.exists():
-                shutil.copy2(source, cls.resources / source.name)
+        # Match the shipping manifest, not a hand-maintained superset that
+        # could accidentally supply a dependency missing from the real build.
+        overlay = json.loads((ROOT / "config/overlay.json").read_text())
+        for entry in overlay["files"]:
+            target = cls.resources / Path(entry["to"]).relative_to("browser/base/content/argon")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / entry["from"], target)
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
@@ -46,7 +48,15 @@ class ChromeSmoke(unittest.TestCase):
                 headless=True,
                 gecko_log=str(ARTIFACTS / "firefox.log"),
                 startup_timeout=90,
-                prefs={"browser.shell.checkDefaultBrowser": False},
+                prefs={
+                    "browser.shell.checkDefaultBrowser": False,
+                    "browser.newtabpage.enabled": True,
+                    # Remote automation disables every Activity Stream feed,
+                    # leaving about:home blank unless initialization is restored.
+                    "browser.newtabpage.activity-stream.testing.shouldInitializeFeeds": True,
+                    "browser.newtabpage.activity-stream.feeds.section.topstories": False,
+                    "browser.newtabpage.activity-stream.showSponsoredTopSites": False,
+                },
             )
         try:
             with patch.dict(os.environ, {"MOZ_REMOTE_ALLOW_SYSTEM_ACCESS": "1"}):
@@ -54,20 +64,35 @@ class ChromeSmoke(unittest.TestCase):
             cls.browser.set_context("chrome")
             cls.browser.set_window_rect(width=1280, height=900)
             cls.browser.execute_script("window.__argonOriginalTab = window.gBrowser.selectedTab;", sandbox=None)
-            module = cls.resources / "argon-controller.mjs"
-            if module.exists():
-                cls.browser.execute_script("""
+            if not os.environ.get("ARGON_TEST_BINARY"):
+                hooks = (ROOT / "browser/base/content/argon-window-hooks.inc.xhtml").read_text()
+                entries = re.findall(
+                    r'<(link|script)\b[^>]*(?:href|src)="chrome://browser/content/argon/([^\"]+)"',
+                    hooks,
+                )
+                errors = cls.browser.execute_async_script("""
+                    const done = arguments[arguments.length - 1];
                     const handler = Services.io.getProtocolHandler("resource").QueryInterface(Ci.nsIResProtocolHandler);
                     handler.setSubstitution("argon-test", Services.io.newURI(arguments[0]));
-                    const { installArgonAppearance } = ChromeUtils.importESModule("resource://argon-test/argon-controller.mjs");
-                    installArgonAppearance(window, Services.prefs);
-                    for (const url of arguments[1]) {
-                      const link = document.createElementNS("http://www.w3.org/1999/xhtml", "link");
-                      link.rel = "stylesheet";
-                      link.href = url;
-                      document.head.append(link);
-                    }
-                """, [cls.resources.as_uri() + "/", ["resource://argon-test/" + name for name in ["tokens.css", "argon.css"]]], sandbox=None)
+                    Promise.all(arguments[1].map(([tag, name]) => new Promise(resolve => {
+                      const element = document.createElementNS("http://www.w3.org/1999/xhtml", tag);
+                      const url = "resource://argon-test/" + name;
+                      if (tag === "script") {
+                        element.type = "module";
+                        element.src = url;
+                      } else {
+                        element.rel = "stylesheet";
+                        element.href = url;
+                      }
+                      element.addEventListener("load", () => resolve(null), { once: true });
+                      element.addEventListener("error", () => resolve(url), { once: true });
+                      document.head.append(element);
+                    }))).then(results => done(results.filter(Boolean)));
+                """, [cls.resources.as_uri() + "/", entries], sandbox=None)
+                if errors:
+                    raise AssertionError(f"Argon window hooks failed to load: {errors}")
+            # A compiled Argon must stand on its own: never repair its startup
+            # by injecting modules or stylesheets from this checkout.
         except Exception:
             # The constructor can fail before cls.browser is bound, so guard
             # the cleanup or the real cause is masked by an AttributeError.
@@ -282,6 +307,73 @@ class ChromeSmoke(unittest.TestCase):
             """)
             self.assertRegex(accent, r"^#[0-9a-fA-F]{6}$",
                              f"Accent token must be an opaque colour in {theme} mode")
+
+    def test_09_native_chrome_colors_follow_the_argon_theme(self):
+        """The painted label/background matter, not the outer <tab>'s color."""
+        palettes = {
+            "light": {"text": "rgb(21, 23, 27)", "background": "rgb(247, 248, 250)",
+                      "selected": "rgb(233, 236, 245)", "field": "rgb(255, 255, 255)"},
+            "dark": {"text": "rgb(247, 248, 250)", "background": "rgb(21, 23, 27)",
+                     "selected": "rgb(52, 57, 69)", "field": "rgb(35, 38, 45)"},
+        }
+        try:
+            for layout in ("horizontal", "vertical"):
+                self.js("window.ArgonAppearance.setLayout(arguments[0]);", [layout])
+                for theme, palette in palettes.items():
+                    with self.subTest(layout=layout, theme=theme):
+                        self.js("window.ArgonAppearance.setTheme(arguments[0]);", [theme])
+                        colors = self.js("""
+                            const style = selector => getComputedStyle(document.querySelector(selector));
+                            return {
+                              label: style('.tabbrowser-tab[selected] .tab-label').color,
+                              selected: style('.tabbrowser-tab[selected] .tab-background').backgroundColor,
+                              toolbar: style('#nav-bar').backgroundColor,
+                              strip: style('#TabsToolbar').color,
+                              // moz-urlbar paints its surface on this child;
+                              // the outer custom element is transparent.
+                              field: style('#urlbar > .urlbar-background').backgroundColor,
+                              fieldText: style('#urlbar-input').color,
+                            };
+                        """)
+                        self.assertEqual(colors["label"], palette["text"],
+                                         "The actual tab label must stay readable")
+                        self.assertEqual(colors["selected"], palette["selected"],
+                                         "The native tab background must use the matching surface")
+                        self.assertEqual(colors["toolbar"], palette["background"])
+                        self.assertEqual(colors["strip"], palette["text"],
+                                         "Tab-strip controls must match the toolbar theme")
+                        self.assertEqual(colors["field"], palette["field"])
+                        self.assertEqual(colors["fieldText"], palette["text"])
+        finally:
+            self.js("window.ArgonAppearance.setLayout('horizontal');")
+            self.js("window.ArgonAppearance.setTheme('system');")
+
+    def test_10_new_tab_uses_the_selected_color_scheme(self):
+        """Theme changes must reach the rendered page, not stop at chrome CSS."""
+        try:
+            self.browser.set_context("content")
+            self.browser.navigate("about:home")
+            Wait(self.browser, timeout=20).until(lambda browser: browser.execute_script(
+                "return !!document.querySelector('.logo-and-wordmark .logo');"))
+            if os.environ.get("ARGON_TEST_BINARY"):
+                # The pinned build has an in-page URL bar. Older stock Gecko
+                # hosts may have no default search engine under automation.
+                Wait(self.browser, timeout=20).until(lambda browser: browser.execute_script(
+                    "return !!document.querySelector('.search-wrapper input[placeholder]');"))
+            for theme in ("dark", "light"):
+                self.browser.set_context("chrome")
+                self.js("window.ArgonAppearance.setTheme(arguments[0]);", [theme])
+                self.browser.set_context("content")
+                Wait(self.browser, timeout=5).until(lambda browser: browser.execute_script(
+                    "return matchMedia('(prefers-color-scheme: dark)').matches === arguments[0];",
+                    [theme == "dark"]))
+                self.assertEqual(self.browser.execute_script(
+                    "return matchMedia('(prefers-color-scheme: dark)').matches;"), theme == "dark")
+                self.browser.set_context("chrome")
+                (ARTIFACTS / f"newtab-{theme}.png").write_bytes(self.browser.screenshot(format="binary"))
+        finally:
+            self.browser.set_context("chrome")
+            self.js("window.ArgonAppearance.setTheme('system');")
 
 
 if __name__ == "__main__":

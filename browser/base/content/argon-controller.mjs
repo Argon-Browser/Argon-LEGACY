@@ -72,7 +72,17 @@ export function installArgonAppearance(win, preferences = win.Services.prefs) {
     preferences,
     root: doc.documentElement,
     media: win.matchMedia("(prefers-color-scheme: dark)"),
-    onChange: applyChecked,
+    onChange(state) {
+      applyChecked(state);
+      // Use Gecko's native web-appearance preference so internal pages and
+      // web content do not keep the opposite scheme after a theme change.
+      // Keep System automatic instead of freezing the current OS color.
+      const contentScheme = { dark: 0, light: 1, system: 2 }[state.theme];
+      const pref = "layout.css.prefers-color-scheme.content-override";
+      if (preferences.getIntPref(pref, 2) !== contentScheme) {
+        preferences.setIntPref(pref, contentScheme);
+      }
+    },
     setVerticalTabs(enabled) {
       if (enabled && !preferences.getBoolPref("sidebar.revamp", false)) {
         preferences.setBoolPref("sidebar.revamp", true);

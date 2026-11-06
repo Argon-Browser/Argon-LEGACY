@@ -13,6 +13,10 @@
     {
       "from": "browser/base/content/argon-controller.mjs",
       "to": "browser/base/content/argon/argon-controller.mjs"
+    },
+    {
+      "from": "argon/preferences/appearance.mjs",
+      "to": "browser/base/content/argon/appearance.mjs"
     }
   ],
   "branding": {
@@ -38,6 +42,10 @@
         {
           "destination": "content/browser/argon/argon-controller.mjs",
           "source": "content/argon/argon-controller.mjs"
+        },
+        {
+          "destination": "content/browser/argon/appearance.mjs",
+          "source": "content/argon/appearance.mjs"
         }
       ]
     },

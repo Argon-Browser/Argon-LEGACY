@@ -12,6 +12,57 @@
  * Tokens come from argon/design-system/tokens.css.
  */
 
+/* Theme the tokens consumed by the native tab content/background, URL bar,
+ * sidebar and window controls. Coloring only the outer <tab> leaves its
+ * children using the OS theme, including white text on a light surface. */
+:root[data-argon-color-scheme] {
+  --toolbox-background-color: var(--argon-bg);
+  --toolbox-background-color-inactive: var(--argon-bg);
+  --toolbox-text-color: var(--argon-text);
+  --toolbox-text-color-inactive: var(--argon-text-secondary);
+  --toolbar-background-color: var(--argon-bg);
+  --toolbar-text-color: var(--argon-text);
+  --toolbarbutton-icon-fill: var(--argon-text);
+  --toolbarbutton-background-color-hover: var(--argon-surface-active);
+  --toolbarbutton-background-color-active: var(--argon-surface-active);
+  --toolbar-field-background-color: var(--argon-surface);
+  --toolbar-field-background-color-focus: var(--argon-surface);
+  --toolbar-field-text-color: var(--argon-text);
+  --toolbar-field-text-color-focus: var(--argon-text);
+  --toolbar-field-border-color: var(--argon-border);
+  --toolbar-field-border-color-focus: var(--argon-accent);
+  --tab-background-color: transparent;
+  --tab-background-color-hover: var(--argon-surface-active);
+  --tab-background-color-selected: var(--argon-surface-active);
+  --tab-text-color: var(--argon-text);
+  --tab-text-color-selected: var(--argon-text);
+  --tab-box-shadow-selected: var(--argon-shadow);
+  --tab-border-radius: var(--argon-radius-sm);
+  --sidebar-background-color: var(--argon-bg);
+  --sidebar-text-color: var(--argon-text);
+  --sidebar-border-color: var(--argon-border);
+  --panel-background: var(--argon-surface);
+  --panel-color: var(--argon-text);
+  --chrome-content-separator-color: var(--argon-border);
+}
+
+:root[data-argon-color-scheme="light"] {
+  --toolbar-color-scheme: light;
+  --tab-selected-color-scheme: light;
+}
+
+:root[data-argon-color-scheme="dark"] {
+  --toolbar-color-scheme: dark;
+  --tab-selected-color-scheme: dark;
+}
+
+#navigator-toolbox,
+#TabsToolbar,
+#PersonalToolbar {
+  background-color: var(--argon-bg);
+  color: var(--argon-text);
+}
+
 /* Flat top toolbar at the 48 px specification. */
 #navigator-toolbox #nav-bar {
   height: var(--argon-toolbar-height);
@@ -33,11 +84,6 @@
   border-radius: var(--argon-radius-sm);
   color: var(--argon-text);
   transition: background-color var(--argon-motion-fast) var(--argon-motion-ease);
-}
-
-#tabbrowser-tabs tab[selected] {
-  background-color: var(--argon-surface-active);
-  box-shadow: var(--argon-shadow);
 }
 
 /* Argon controls stay flat and on the 8 px radius scale. */
