@@ -4,7 +4,7 @@
     "repository": "https://github.com/mozilla-firefox/firefox",
     "revision": "d9bd6be9a67efb1c2667ef91a89856f35eb7cf5e",
     "archive_url": "https://codeload.github.com/mozilla-firefox/firefox/tar.gz/d9bd6be9a67efb1c2667ef91a89856f35eb7cf5e",
-    "archive_sha256": "017ad42066ad5ab4c308244be8bcbcd0037b66a47ab76163c7203c695a0dfdd0",
+    "archive_sha256": "8918a7caba8e41bfdfc2ed81ccabaffc6039ae04b1f733cabd924ed2da919935",
     "archive_root": "firefox-d9bd6be9a67efb1c2667ef91a89856f35eb7cf5e"
   },
   "artifacts": {
