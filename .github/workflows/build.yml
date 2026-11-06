@@ -77,6 +77,10 @@ jobs:
             bash findutils flatpak gzip make perl tar unzip \
             xvfb libgtk-3-0 libdbus-glib-1-2 libxt6
 
+      - name: Initialize Argon build workspace before cache restore
+        run: |
+          python3 -c "import sys; sys.path.insert(0, 'scripts'); import argon; argon.Workspace(argon.REPO, argon.default_workspace()).claim()"
+
       - name: Cache bootstrapped Mozilla toolchains and pinned source archive
         uses: actions/cache@v4
         with:
@@ -92,6 +96,7 @@ jobs:
             /home/runner/.mozbuild/indices
             /home/runner/.cargo/bin
             /home/runner/.rustup
+            /home/runner/argon-build/.argon-workspace.json
             /home/runner/argon-build/cache
           key: argon-toolchains-linux-x86_64-${{ hashFiles('config/firefox.lock.json') }}
 
