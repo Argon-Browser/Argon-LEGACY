@@ -1,7 +1,8 @@
 # Building Argon
 
-Status: fork tooling implemented and tested offline. No full Argon build has
-been completed yet; see "Verified versus unverified".
+Status: fork tooling, full Linux `x86_64` source compilation (`dist/bin/argon`),
+Marionette chrome smoke tests on the compiled binary, and `.tar.xz` / `.flatpak`
+packaging are implemented and verified.
 
 Argon is a fork of Firefox Desktop. It does not restyle an installed Firefox:
 it takes one pinned upstream source revision, applies Argon's changes to it,
@@ -77,9 +78,12 @@ python3 scripts/argon.py run
 
 # Produce the distributable archive (refuses artifact builds).
 python3 scripts/argon.py package
+
+# Package the built archive into a single-file Flatpak bundle (org.argon.browser).
+python3 scripts/argon.py flatpak
 ```
 
-The same commands are available as `npm run doctor|fetch|apply|bootstrap|build|start|package`.
+The same commands are available as `npm run doctor|fetch|apply|bootstrap|build|start|package|flatpak`.
 
 The workspace defaults to `~/.cache/argon-build` (or `$XDG_CACHE_HOME/argon-build`);
 override it with `ARGON_WORKSPACE` or `--workspace`. It must be an ASCII path
@@ -162,9 +166,19 @@ GitHub Actions (`push` to `main`/`v*` tags or `workflow_dispatch`):
    `Profile=argon`, `RemotingName=argon`) and `dist/bin/argon --version`.
 6. Runs `tests/browser/test_chrome.py` with `ARGON_TEST_BINARY` pointed at the
    newly compiled `dist/bin/argon`.
-7. Runs `package` (`./mach package`) and uploads `argon-*.tar.xz`,
-   `SHA256SUMS`, `application.ini`, and the chrome smoke screenshots as the
-   `argon-linux-x86_64` workflow artifact.
+7. Runs `package` (`./mach package`) and `flatpak` (`python3 scripts/argon.py flatpak`),
+   uploading `argon-*.tar.xz`, `argon-*.flatpak`, `SHA256SUMS`,
+   `application.ini`, and the chrome smoke screenshots as the
+   `argon-linux-x86_64` workflow artifact (and publishing a GitHub Release on
+   `v*` tags).
+
+## Installing the Flatpak bundle
+
+```bash
+flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo
+flatpak install --user -y argon-162.0a1.en-US.linux-x86_64.flatpak
+flatpak run org.argon.browser
+```
 
 ## Requirements
 

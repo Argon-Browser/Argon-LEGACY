@@ -16,6 +16,7 @@ Commands are deliberately small and fail closed:
                default, or --artifact for a front-end-only loop
     run        launch the built browser with an isolated development profile
     package    ./mach package, producing the distributable archive
+    flatpak    package a built Argon archive into an org.argon.browser.flatpak bundle
 
 Every write is confined to a dedicated ASCII workspace owned by this tool, and
 nothing claims that a build succeeded unless ./mach actually did.
@@ -38,8 +39,38 @@ REPO = Path(__file__).resolve().parents[1]
 LOCK = REPO / "config" / "firefox.lock.json"
 OVERLAY = REPO / "config" / "overlay.json"
 MOZCONFIG = REPO / "config" / "mozconfig"
+FLATPAK_DIR = REPO / "packaging" / "flatpak"
 
 APP_NAME = "argon"
+FLATPAK_APP_ID = "org.argon.browser"
+FLATPAK_RUNTIME = "org.freedesktop.Platform"
+FLATPAK_SDK = "org.freedesktop.Sdk"
+FLATPAK_RUNTIME_VERSION = "24.08"
+FLATPAK_ARCH = "x86_64"
+FLATPAK_RUNTIME_REPO = "https://flathub.org/repo/flathub.flatpakrepo"
+FLATPAK_FINISH_ARGS = (
+    "--share=ipc",
+    "--share=network",
+    "--socket=wayland",
+    "--socket=fallback-x11",
+    "--socket=pulseaudio",
+    "--socket=pcsc",
+    "--socket=cups",
+    "--device=dri",
+    "--device=all",
+    "--filesystem=xdg-download:rw",
+    "--filesystem=xdg-run/pipewire-0:ro",
+    "--persist=.argon",
+    "--env=GTK_USE_PORTAL=1",
+    "--env=MOZ_APP_REMOTINGNAME=argon",
+    "--own-name=org.mozilla.argon.*",
+    "--own-name=org.mpris.MediaPlayer2.argon.*",
+    "--talk-name=org.freedesktop.FileManager1",
+    "--talk-name=org.freedesktop.Notifications",
+    "--talk-name=org.freedesktop.ScreenSaver",
+    "--talk-name=org.freedesktop.secrets",
+    "--system-talk-name=org.freedesktop.NetworkManager",
+)
 WORKSPACE_OWNER = "argon-build"
 
 BEGIN = "BEGIN Argon overlay"
@@ -501,6 +532,147 @@ def command_package(workspace, lock_path):
             "exit_code": completed.returncode, "succeeded": completed.returncode == 0}
 
 
+def default_flatpak_output(archive_path):
+    name = archive_path.name
+    for ext in (".tar.xz", ".tar.zst", ".tar.bz2", ".tar.gz"):
+        if name.endswith(ext):
+            return archive_path.with_name(name[:-len(ext)] + ".flatpak")
+    return archive_path.with_suffix(".flatpak")
+
+
+def command_flatpak(workspace, archive=None, output=None):
+    flatpak_bin = shutil.which("flatpak")
+    if not flatpak_bin:
+        raise BuildError("flatpak is not installed; install the flatpak package to build a bundle")
+
+    if archive is not None:
+        archive_path = Path(archive).resolve()
+    else:
+        dist = workspace.obj / "dist"
+        candidates = sorted(
+            p for p in dist.glob(f"{APP_NAME}-*")
+            if p.is_file() and any(p.name.endswith(ext) for ext in (".tar.xz", ".tar.zst", ".tar.bz2", ".tar.gz"))
+        ) if dist.is_dir() else []
+        if not candidates:
+            raise BuildError(
+                "No packaged Argon archive found; run `python3 scripts/argon.py package` "
+                "first or pass --archive"
+            )
+        archive_path = candidates[0].resolve()
+
+    if not archive_path.is_file():
+        raise BuildError(f"Packaged Argon archive not found: {archive_path}")
+
+    output_path = Path(output).resolve() if output is not None else default_flatpak_output(archive_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    staging = Path(tempfile.mkdtemp(dir=output_path.parent, prefix=".flatpak-build-"))
+    try:
+        build_dir = staging / "build"
+        repo_dir = staging / "repo"
+        files_dir = build_dir / "files"
+        app_lib = files_dir / "lib" / APP_NAME
+        (build_dir / "var").mkdir(parents=True, exist_ok=True)
+
+        safe_extract(archive_path, app_lib, APP_NAME)
+
+        binary = app_lib / APP_NAME
+        app_ini = app_lib / "application.ini"
+        if not binary.is_file() or not app_ini.is_file():
+            raise BuildError(f"Archive {archive_path} is missing {APP_NAME} or application.ini")
+        ini_text = app_ini.read_text(encoding="utf-8", errors="replace")
+        if "Name=Argon" not in ini_text or "Vendor=Argon" not in ini_text:
+            raise BuildError(f"Archive {archive_path} does not have Argon application.ini identity")
+
+        for exe_name in (APP_NAME, f"{APP_NAME}-bin", "pingsender", "gfxtest"):
+            exe_path = app_lib / exe_name
+            if exe_path.is_file():
+                exe_path.chmod(exe_path.stat().st_mode | 0o755)
+
+        dist_dir = app_lib / "distribution"
+        dist_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(FLATPAK_DIR / "policies.json", dist_dir / "policies.json")
+
+        bin_dir = files_dir / "bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        launcher = bin_dir / APP_NAME
+        shutil.copy2(FLATPAK_DIR / "argon-launcher.sh", launcher)
+        launcher.chmod(0o755)
+
+        apps_dir = files_dir / "share" / "applications"
+        apps_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(
+            FLATPAK_DIR / f"{FLATPAK_APP_ID}.desktop",
+            apps_dir / f"{FLATPAK_APP_ID}.desktop",
+        )
+
+        metainfo_dir = files_dir / "share" / "metainfo"
+        metainfo_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(
+            FLATPAK_DIR / f"{FLATPAK_APP_ID}.metainfo.xml",
+            metainfo_dir / f"{FLATPAK_APP_ID}.metainfo.xml",
+        )
+
+        branding_dir = REPO / "browser" / "branding" / "argon"
+        for size in (16, 32, 48, 64, 128, 256):
+            icon_dir = files_dir / "share" / "icons" / "hicolor" / f"{size}x{size}" / "apps"
+            icon_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(branding_dir / f"default{size}.png", icon_dir / f"{FLATPAK_APP_ID}.png")
+
+        icon_512_dir = files_dir / "share" / "icons" / "hicolor" / "512x512" / "apps"
+        icon_512_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(
+            REPO / "brand-kit" / "mark-primary-512.png",
+            icon_512_dir / f"{FLATPAK_APP_ID}.png",
+        )
+
+        scalable_dir = files_dir / "share" / "icons" / "hicolor" / "scalable" / "apps"
+        scalable_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(
+            REPO / "brand-kit" / "mark-primary.svg",
+            scalable_dir / f"{FLATPAK_APP_ID}.svg",
+        )
+
+        runtime_ref = f"{FLATPAK_RUNTIME}/{FLATPAK_ARCH}/{FLATPAK_RUNTIME_VERSION}"
+        sdk_ref = f"{FLATPAK_SDK}/{FLATPAK_ARCH}/{FLATPAK_RUNTIME_VERSION}"
+        (build_dir / "metadata").write_text(
+            f"[Application]\nname={FLATPAK_APP_ID}\nruntime={runtime_ref}\nsdk={sdk_ref}\n",
+            encoding="utf-8",
+        )
+
+        steps = [
+            [flatpak_bin, "build-finish", str(build_dir), f"--command={APP_NAME}", *FLATPAK_FINISH_ARGS],
+            [flatpak_bin, "build-export", "--disable-sandbox", str(repo_dir), str(build_dir), "stable"],
+            [
+                flatpak_bin,
+                "build-bundle",
+                str(repo_dir),
+                str(output_path),
+                FLATPAK_APP_ID,
+                "stable",
+                f"--runtime-repo={FLATPAK_RUNTIME_REPO}",
+            ],
+        ]
+        for cmd in steps:
+            completed = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            if completed.returncode != 0:
+                detail = (completed.stderr or completed.stdout or "").strip()
+                raise BuildError(f"Flatpak command failed ({' '.join(cmd[:2])}): {detail}")
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+    return {
+        "app_id": FLATPAK_APP_ID,
+        "runtime": runtime_ref,
+        "archive": str(archive_path),
+        "bundle": str(output_path),
+        "bundle_sha256": sha256_file(output_path),
+        "bundle_size": output_path.stat().st_size,
+        "exit_code": 0,
+        "succeeded": True,
+    }
+
+
 def memory_gib():
     try:
         with open("/proc/meminfo") as handle:
@@ -574,8 +746,12 @@ def main(argv=None):
                         help="front-end-only artifact build (keeps Firefox's native identity)")
     parser.add_argument("--binary", help="run: browser binary to launch instead of the build")
     parser.add_argument("--dry-run", action="store_true", help="run: print the command only")
+    parser.add_argument("--archive", type=Path, default=None,
+                        help="flatpak: packaged argon-*.tar.* archive to bundle")
+    parser.add_argument("--output", type=Path, default=None,
+                        help="flatpak: output .flatpak bundle path")
     parser.add_argument("command", choices=["doctor", "fetch", "apply", "bootstrap", "build",
-                                            "run", "package"])
+                                            "run", "package", "flatpak"])
     parser.add_argument("extra", nargs=argparse.REMAINDER,
                         help="run: arguments passed through to the browser")
     args = parser.parse_args(argv)
@@ -595,6 +771,15 @@ def main(argv=None):
             report = command_build(workspace, args.lock, args.jobs, args.artifact)
         elif args.command == "package":
             report = command_package(workspace, args.lock)
+        elif args.command == "flatpak":
+            archive = args.archive
+            output = args.output
+            extra = list(args.extra)
+            if "--archive" in extra and extra.index("--archive") + 1 < len(extra):
+                archive = Path(extra[extra.index("--archive") + 1])
+            if "--output" in extra and extra.index("--output") + 1 < len(extra):
+                output = Path(extra[extra.index("--output") + 1])
+            report = command_flatpak(workspace, archive, output)
         else:
             # Accept run's own flags after the command too (`run --dry-run`);
             # everything after `--` goes to the browser untouched.

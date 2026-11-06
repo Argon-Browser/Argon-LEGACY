@@ -103,7 +103,8 @@ npm run apply       # apply the Argon change set (all-or-nothing, drift-checked)
 npm run bootstrap   # let mach install clang, Rust, cbindgen, and node
 npm run build       # full build: dist/bin/argon with the Argon identity
 npm start           # launch the build with a development profile
-npm run package     # distributable archive
+npm run package     # distributable archive (argon-*.tar.xz)
+npm run flatpak     # single-file Flatpak bundle (argon-*.flatpak / org.argon.browser)
 ```
 
 The build workspace lives in `~/.cache/argon-build` (override with

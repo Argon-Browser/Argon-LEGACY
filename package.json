@@ -24,6 +24,7 @@
     "build:artifact": "python3 scripts/argon.py --artifact build",
     "start": "python3 scripts/argon.py run",
     "package": "python3 scripts/argon.py package",
+    "flatpak": "python3 scripts/argon.py flatpak",
     "test:browser": "node scripts/run-browser-tests.mjs",
     "diagnose:browser": "node scripts/run-browser-tests.mjs --diagnose"
   },
