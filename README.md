@@ -1,32 +1,47 @@
 # Argon Browser
 
-Status: Phase 1, Foundation and prototyping (pre-alpha, planning and bootstrap stage)  
+Status: Phase 1, Foundation and prototyping (pre-alpha, Milestone 0.1 in progress)  
 Base engine: [Firefox / Gecko](https://firefox-source-docs.mozilla.org/) · Target platforms: Linux, Windows, macOS
 
-Argon is an open-source desktop web browser built on the [Firefox (Gecko)](https://firefox-source-docs.mozilla.org/) engine. It pairs a layout and workflow inspired by Arc and Zen Browser with native Firefox WebExtensions support and a compatibility bridge for Chromium extensions (Manifest V2 and V3).
+Argon is an open-source desktop web browser forked from [Firefox (Gecko)](https://firefox-source-docs.mozilla.org/). It builds from Firefox source into its own product: its own binary, profile directory, vendor, and branding, installed and run alongside (never inside) an existing Firefox. It pairs a layout and workflow inspired by Arc and Zen Browser with native Firefox WebExtensions support and a compatibility bridge for Chromium extensions (Manifest V2 and V3).
 
 ## Current project status
 
-The project is in the planning and repository bootstrap stage, preparing to start Milestone 0.1 (`Argon 0.1: Visual Foundation`).
+The project is in Phase 1, actively building Milestone 0.1 (`Argon 0.1: Visual Foundation`).
 
 | Area or deliverable | Current state | Target phase |
 | :--- | :--- | :--- |
 | Architecture and implementation plan | Completed ([`Argon Browser — Implementation Plan.md`](./Argon%20Browser%20%E2%80%94%20Implementation%20Plan.md)) | Phase 1 |
 | Repository and version control setup | Initialized | Phase 1 |
-| Firefox Artifact Build and isolated profile | Pending bootstrap | Phase 1 (Milestone 0.1) |
-| Argon design system and flat toolbar (48 px) | Planned | Phase 1 (Milestone 0.1) |
-| Adaptive horizontal and vertical tab strip | Planned | Phases 1 to 2 (Milestone 0.1) |
-| Light, Dark, and System Auto theme switcher | Planned | Phases 1 to 2 (Milestone 0.1) |
+| Design tokens and flat 48 px toolbar | Implemented and verified in real Firefox | Phase 1 (Milestone 0.1) |
+| Light / Dark / System Auto theme switcher | Implemented and verified in real Firefox | Phase 1 (Milestone 0.1) |
+| Adaptive horizontal and vertical tab strip | Implemented on Firefox's native sidebar tabs; verified in real Firefox | Phase 1 (Milestone 0.1) |
+| Argon appearance controller and preferences | Implemented, unit and browser tested | Phase 1 (Milestone 0.1) |
+| Argon branding package and icons | Implemented for the Linux target ([`docs/branding.md`](./docs/branding.md)) | Phase 1 (Milestone 0.1) |
+| Fork build tooling (pinned upstream, change set, Argon identity) | Implemented and offline tested; first full build pending a machine with enough RAM ([`docs/building.md`](./docs/building.md)) | Phase 1 (Milestone 0.1) |
+| Independent application identity (`argon` binary, profile, remoting name, vendor) | Configured in [`config/mozconfig`](./config/mozconfig) and [`config/overlay.json`](./config/overlay.json); unverified until the first full build | Phase 1 (Milestone 0.1) |
+| Manifest analyzer (Extension Bridge module 1) | Implemented with CLI ([`docs/extension-bridge.md`](./docs/extension-bridge.md)) | Phase 4 |
+| 50-extension benchmark registry | Scaffolded; every entry `NOT_TESTED` | Phase 4 |
+| Extension Bridge modules 2-5 | Not started | Phase 4 |
 | Smart sidebar, command palette, and New Tab | Planned | Phase 2 |
 | Workspaces, tab suspension, and `about:argon` | Planned | Phase 3 |
-| Argon Extension Bridge (Chromium MV2/MV3) | Planned (parallel R&D track) | Phase 4 |
 | Cross-platform packaging and public beta | Planned | Phase 5 |
+
+The Milestone 0.1 chrome is verified against a real Gecko 159 through
+Marionette in an isolated temporary profile (`tests/browser/test_chrome.py`):
+the 48 px flat toolbar, the three theme modes, and the tab layout switch work
+in real browser chrome while Firefox's own tab element, session, and sidebar
+implementation stay in charge. A compiled `argon` binary has not been produced
+yet; see [`docs/building.md`](./docs/building.md) for what is and is not
+verified.
 
 ## Core design and features
 
 ### Appearance
 
-Argon uses a flat interface without 3D bevels or heavy drop shadows, built on a `4 px` and `8 px` spatial grid with `8 to 12 px` corner radii. The top toolbar is `48 px` tall, and the sidebar collapses from `240 px` to `52 px`. Users can adjust accent colors (default `#6478F5`), UI density, corner radii, and themes (`#F7F8FA` Light, `#15171B` Dark, or System Auto) in real time without restarting. Transitions run for `120 to 200 ms` and respect `prefers-reduced-motion`.
+Argon uses a flat interface without 3D bevels or heavy drop shadows, built on a `4 px` and `8 px` spatial grid with `8 to 12 px` corner radii. The top toolbar is `48 px` tall. The design tokens are defined in [`argon/design-system/tokens.css`](./argon/design-system/tokens.css), including the `240 px` expanded and `52 px` collapsed sidebar widths and the `120 to 200 ms` motion scale that respects `prefers-reduced-motion`.
+
+Milestone 0.1 exposes two of those controls at runtime, from the Argon toolbar button: the theme (`#F7F8FA` Light, `#15171B` Dark, or System Auto) and the tab layout. Adjustable accent colours, UI density, and corner radii are specified in the token layer but are not yet exposed in the interface.
 
 ### Usability and navigation
 
@@ -38,7 +53,7 @@ Standard Firefox add-ons from Mozilla Add-ons (AMO) run natively. For Chromium p
 
 ## Architecture overview
 
-Argon is an incremental fork of Firefox Desktop. Gecko handles rendering, SpiderMonkey runs JavaScript, Necko manages networking, WebRender handles GPU compositing, and NSS provides cryptography. Argon modifies the front-end layer (HTML, CSS, JavaScript, XUL, and Web Components) and the extension subsystem so that site permissions, password management, private browsing isolation, and screen-reader accessibility stay intact across upstream updates.
+Argon is a fork of Firefox Desktop, maintained as a reviewable change set on top of a pinned upstream revision rather than a full copy of mozilla-central (see [`docs/building.md`](./docs/building.md)). Gecko handles rendering, SpiderMonkey runs JavaScript, Necko manages networking, WebRender handles GPU compositing, and NSS provides cryptography. Argon modifies the front-end layer (HTML, CSS, JavaScript, XUL, and Web Components) and the extension subsystem so that site permissions, password management, private browsing isolation, and screen-reader accessibility stay intact across upstream updates.
 
 ### Planned repository layout
 
@@ -69,38 +84,77 @@ The 28-week schedule below is estimated for a team of 3 to 4 developers working 
 
 | Phase | Timeline | Deliverables | Target milestone |
 | :--- | :--- | :--- | :--- |
-| 1. Foundation and prototyping *(current)* | Weeks 1 to 4 | Visual identity and CSS design tokens, Git and build script setup, Firefox Artifact Build with an isolated profile, initial flat toolbar. | Compilable Argon prototype (`v0.1`) |
+| 1. Foundation and prototyping *(current)* | Weeks 1 to 4 | Visual identity and CSS design tokens, Git and build script setup, Argon built from Firefox source with its own identity and profile, initial flat toolbar. | Compilable Argon prototype (`v0.1`) |
 | 2. Interface and navigation | Weeks 5 to 10 | Navigation toolbar, horizontal and vertical tab strip, smart sidebar, Light/Dark/Compact modes, New Tab page, command palette, keyboard and ARIA support. | Argon Alpha (functional UI) |
 | 3. Productivity and settings | Weeks 11 to 15 | Isolated workspaces, persistent pinned tabs, automatic tab unloading, `about:argon` preferences UI, onboarding flow, browser data importer. | Complete core experience |
 | 4. Extension compatibility | Weeks 16 to 23 | Native WebExtensions verification, Chrome `manifest.json` analyzer, Chromium API adapters, MV2/MV3 background runtime bridge, local CRX/ZIP importer, 50-extension test suite. | Experimental Extension Bridge |
 | 5. Quality and distribution | Weeks 24 to 28 | Stability, performance, security, and regression testing; Linux and Windows packaged builds (macOS follow-up); GitHub Actions CI/CD and signed updates. | Argon Public Beta |
 
-## Local development setup
+## Building Argon
 
-Local front-end work uses Firefox Artifact Builds, which download pre-compiled C++ and Rust binaries from Mozilla instead of compiling the engine from source. Building on Linux requires at least 4 GB of RAM (8 GB or more recommended) and 30 GB of free disk space. Full C++ or Rust builds run on GitHub Actions CI or remote build machines.
+Argon compiles from a pinned Firefox revision with the Argon change set
+applied. Full details, including the identity table and what is verified, are
+in [`docs/building.md`](./docs/building.md).
 
 ```bash
-# 1. Download the official Mozilla bootstrap script
-curl -LO https://raw.githubusercontent.com/mozilla-firefox/firefox/refs/heads/main/python/mozboot/bin/bootstrap.py
-
-# 2. Prepare system dependencies and clone the Firefox source repository
-#    (Select "Firefox for Desktop Artifact Mode" when prompted)
-python3 bootstrap.py
-
-# 3. Enter the source directory and run the initial build
-cd firefox
-./mach build
-./mach run
-
-# 4. Fast iterative rebuilds for UI (HTML/XUL, CSS, JS) modifications
-./mach build faster
-./mach run
+npm run doctor      # toolchain, RAM, disk, and identity report; changes nothing
+npm run fetch       # download and verify the pinned Firefox source
+npm run apply       # apply the Argon change set (all-or-nothing, drift-checked)
+npm run bootstrap   # let mach install clang, Rust, cbindgen, and node
+npm run build       # full build: dist/bin/argon with the Argon identity
+npm start           # launch the build with a development profile
+npm run package     # distributable archive
 ```
+
+The build workspace lives in `~/.cache/argon-build` (override with
+`ARGON_WORKSPACE`). A full build needs about 40 GB of disk and, realistically,
+8 GB of RAM or more; lower `--jobs` on smaller machines
+(`python3 scripts/argon.py --jobs 1 build`) or build on a CI runner.
+
+For CSS/JS/XHTML/FTL work, `npm run build:artifact` downloads Mozilla's
+pre-built engine instead of compiling it. Those binaries keep Firefox's native
+identity, so artifact builds are a development loop only and cannot be
+packaged as Argon.
+
+## Testing
+
+Argon separates fast unit tests from tests that need a real browser.
+
+```bash
+# Unit tests (appearance state, extension analyzer, CLI, benchmark registry)
+npm test
+
+# Python suites (fork build tooling, branding package)
+npm run test:python
+
+# Analyze an extension manifest statically (exit code carries the verdict)
+npm run analyze -- path/to/manifest.json
+
+# Browser chrome smoke tests: loads the Argon modules into a real Gecko browser
+# inside an isolated temporary profile and asserts on live chrome geometry.
+python3 -m venv .cache/browser-venv
+.cache/browser-venv/bin/python -m pip install -r tests/browser/requirements.txt
+.cache/browser-venv/bin/python tests/browser/test_chrome.py
+
+# Diagnostic side-by-side of a clean Firefox window versus an Argon one
+.cache/browser-venv/bin/python tests/browser/diagnose.py
+```
+
+Set `ARGON_TEST_BINARY` to point the browser tests at a built Argon
+(`~/.cache/argon-build/obj/dist/bin/argon`). Until the first full build exists
+they default to the installed Firefox as a Gecko test host; either way they
+never touch an existing profile.
+Screenshots and the Firefox log land in `artifacts/chrome-smoke/` for review.
+
+The browser tests assert real geometry rather than preferences alone, so they
+catch the failure mode where a preference is set but nothing visibly changes.
+They also verify that Firefox's native tab element survives a layout switch
+instead of being cloned or replaced.
 
 ## Development standards and governance
 
 All project artifacts, including documentation, source code, identifiers, comments, commit messages, pull requests, issue tracking, CI/CD configurations, and default UI strings, are written in English.
 
-Argon uses dedicated user profile directories (`~/.argon` on Linux, `AppData` on Windows) so it never conflicts with an existing Firefox installation. Custom telemetry is disabled by default, and extension code never runs in privileged parent processes.
+Argon keeps its own profile root (`MOZ_APP_PROFILE=argon`), remoting name, and vendor, so it never opens, locks, or migrates a Firefox profile in place and never hands URLs to a running Firefox. Argon builds do not set `MOZ_TELEMETRY_REPORTING` or `MOZILLA_OFFICIAL`, and the default preferences turn off Mozilla studies, Normandy experiments, and data submission; `argon.telemetry.enabled` (default `false`) is reserved for Argon's own telemetry, which does not exist yet. Extension code never runs in privileged parent processes.
 
 Repository code is currently covered by the root [`LICENSE`](./LICENSE). Upstream Firefox and Gecko components remain under the [Mozilla Public License 2.0 (MPL 2.0)](https://www.mozilla.org/en-US/MPL/2.0/), and distributed binaries follow the [Mozilla Trademark Distribution Policy](https://www.mozilla.org/en-US/foundation/trademarks/distribution-policy/) with independent Argon branding. Full specifications and the 12-point beta release checklist are in [`Argon Browser — Implementation Plan.md`](./Argon%20Browser%20%E2%80%94%20Implementation%20Plan.md).

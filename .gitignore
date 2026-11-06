@@ -1,1 +1,10 @@
-Argon Browser — Implementation Plan.md
+.cache/
+node_modules/
+__pycache__/
+*.py[cod]
+obj-*/
+artifacts/
+.env
+.env.*
+!.env.example
+
